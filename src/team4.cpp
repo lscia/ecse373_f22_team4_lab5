@@ -1,30 +1,54 @@
+//ros includes
+#include "ros/ros.h"
+#include "std_msgs/String.h"
 #include "std_srvs/Trigger.h"
 #include "std_srvs/SetBool.h"
 
-#include "ros/ros.h"
-#include "std_msgs/String.h"
-
+//osrf_gear includes
 #include "osrf_gear/Order.h"
+#include "osrf_gear/Shipment.h"
+#include "osrf_gear/Product.h"
+#include "osrf_gear/StorageUnit.h"
+#include "osrf_gear/LogicalCameraImage.h"
+
+//c++ includes
+#include <algorithm>
+#include <vector>
 #include <sstream>
 
+//declare vectors for data
 std::vector<osrf_gear::Order> order_vector;
+std::vector<std::vector<osrf_gear::StorageUnit>> product_bin_vector;
+std::vector<std::string> product_type_vector;
 
-int service_call_succeeded;
+//initialize vectors
 order_vector.clear();
+product_bin_vector.clear();
+product_type_vector.clear();
 
+//service call stuff
+int service_call_succeeded;
 std_srvs::Trigger begin_comp;
 std_srvs::SetBool my_bool_var;
 
+//osrf_gear stuff
+osrf_gear::GetMaterialLocations material_locations;
+osrf_gear::LogicalCameraImage cam_image;
+
+//subscriber callbacks
+
 void orderCallback(const osrf_gear::Order::ConstPtr& msg)
 {
-    order_vector.push_back(msg);
-    ROS_INFO("I recieved an order: [%s]" msg.order_id);
-    // getting the order ID
+  order_vector.push_back(msg);
+  ROS_INFO("I recieved an order: [%s]" msg.order_id);
+  // getting the order ID
 }
 
-/**
- * This tutorial demonstrates simple sending of messages over the ROS system.
- */
+void camCallback(const osrf_gear::LogicalCameraImage::ConstPtr& msg){
+  cam_image = *msg;
+}
+
+//main loop from example wiki code for publisher/subscriber
 int main(int argc, char **argv)
 {
   /**
@@ -67,12 +91,23 @@ int main(int argc, char **argv)
 
   ros::Rate loop_rate(10);
 
-  ros::ServiceClient begin_client = n.serviceClient<std_srvs::Trigger>("<service_name>");
+  ros::ServiceClient begin_client = n.serviceClient<std_srvs::Trigger>("/ariac/start_competition");
+
+  ros::ServiceClient material_location = n.serviceClient<osrf_gear::GetMaterialLocations>("/ariac/material_locations");
   
   my_bol_var.request.data = true;
 
-  int service_call_succeeded;
-  service_call_succeeded = begin_client.call(begin(comp);
+  service_call_succeeded = begin_client.call(begin_comp);
+  if(!service_call_succeeded){
+    ROS_ERROR("Competition service call failed");
+    ros::shutdown();
+  }
+  if(begin_comp.response.success){
+    ROS_INFO("competiton service called successfully %s", \ begin_comp.response.message.c_str());
+  }
+  else{
+    ROS_ERROR("Competition failed to start, service called");
+  }
 
   /**
    * A count of how many messages we have sent. This is used to create
@@ -84,13 +119,6 @@ int main(int argc, char **argv)
     /**
      * This is a message object. You stuff it with data, and then publish it.
      */
-    std_msgs::String msg;
-
-    std::stringstream ss;
-    ss << "hello world " << count;
-    msg.data = ss.str();
-
-    ROS_INFO("%s", msg.data.c_str());
 
     /**
      * The publish() function is how you send messages. The parameter
@@ -101,6 +129,24 @@ int main(int argc, char **argv)
 //    chatter_pub.publish(msg);
 
     ros::spinOnce();
+
+
+    //nested for loop over all orders, shipments, and products to find locations with material_location service
+    product_type_vector.clear();
+    product_bin_vector.clear();
+    for (const auto& order : order_vector){
+      for (const auto& shipment : order.shipments){
+        for (const auto& product : shipment.products){
+          //adds the product type to product_type_vector, and the vector of bins it can be found in to product_bin_vector
+          product_type_vector.push_back(product.type);
+          product_bin_vector.push_back(material_locations.call(product.type));
+        }
+      }
+    }
+    //ROS_INFO prints the first product type and first bin it is found in
+    ROS_INFO("The first product is of type : %s,  and is located in the bin : %s", product_type_vector.front(), product_bin_vector.front().front().unit_id);
+
+
 
     loop_rate.sleep();
     ++count;
