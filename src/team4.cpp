@@ -10,6 +10,7 @@
 #include "osrf_gear/Product.h"
 #include "osrf_gear/StorageUnit.h"
 #include "osrf_gear/LogicalCameraImage.h"
+#include "osrf_gear/GetMaterialLocations.h"
 
 //c++ includes
 #include <algorithm>
@@ -21,26 +22,21 @@ std::vector<osrf_gear::Order> order_vector;
 std::vector<std::vector<osrf_gear::StorageUnit>> product_bin_vector;
 std::vector<std::string> product_type_vector;
 
-//initialize vectors
-order_vector.clear();
-product_bin_vector.clear();
-product_type_vector.clear();
-
 //service call stuff
 int service_call_succeeded;
 std_srvs::Trigger begin_comp;
 std_srvs::SetBool my_bool_var;
 
 //osrf_gear stuff
-osrf_gear::GetMaterialLocations material_locations;
 osrf_gear::LogicalCameraImage cam_image;
 
 //subscriber callbacks
 
 void orderCallback(const osrf_gear::Order::ConstPtr& msg)
 {
-  order_vector.push_back(msg);
-  ROS_INFO("I recieved an order: [%s]" msg.order_id);
+  osrf_gear::Order order = *msg;
+  order_vector.push_back(order);
+  ROS_INFO("I recieved an order: [%s]", order.order_id);
   // getting the order ID
 }
 
@@ -51,6 +47,11 @@ void camCallback(const osrf_gear::LogicalCameraImage::ConstPtr& msg){
 //main loop from example wiki code for publisher/subscriber
 int main(int argc, char **argv)
 {
+  //clear vectors
+  order_vector.clear();
+  product_bin_vector.clear();
+  product_type_vector.clear();
+
   /**
    * The ros::init() function needs to see argc and argv so that it can perform
    * any ROS arguments and name remapping that were provided at the command line.
@@ -61,7 +62,8 @@ int main(int argc, char **argv)
    * You must call one of the versions of ros::init() before using any other
    * part of the ROS system.
    */
-  ros::init(argc, argv, "talker");
+
+  ros::init(argc, argv, "team4_lab5");
 
   /**
    * NodeHandle is the main access point to communications with the ROS system.
@@ -69,7 +71,6 @@ int main(int argc, char **argv)
    * NodeHandle destructed will close down the node.
    */
   ros::NodeHandle n;
-  service_call_succeeded = begin_client.call(begin_comp);
   /**
    * The advertise() function is how you tell ROS that you want to
    * publish on a given topic name. This invokes a call to the ROS
@@ -91,11 +92,25 @@ int main(int argc, char **argv)
 
   ros::Rate loop_rate(10);
 
-  ros::ServiceClient begin_client = n.serviceClient<std_srvs::Trigger>("/ariac/start_competition");
+  //subscribes to all topics
+  ros::Subscriber orders = n.subscribe("/ariac/Orders", 1000, orderCallback);
+  ros::Subscriber cam_bin1 = n.subscribe("/ariac/logical_camera_bin1", 1000, camCallback);
+  ros::Subscriber cam_bin2 = n.subscribe("/ariac/logical_camera_bin2", 1000, camCallback);
+  ros::Subscriber cam_bin3 = n.subscribe("/ariac/logical_camera_bin3", 1000, camCallback);
+  ros::Subscriber cam_bin4 = n.subscribe("/ariac/logical_camera_bin4", 1000, camCallback);
+  ros::Subscriber cam_bin5 = n.subscribe("/ariac/logical_camera_bin5", 1000, camCallback);
+  ros::Subscriber cam_bin6 = n.subscribe("/ariac/logical_camera_bin6", 1000, camCallback);
+  ros::Subscriber cam_agv1 = n.subscribe("/ariac/logical_camera_agv1", 1000, camCallback);
+  ros::Subscriber cam_agv2 = n.subscribe("/ariac/logical_camera_agv2", 1000, camCallback);
+  ros::Subscriber cam_quality1 = n.subscribe("/ariac/quality_control_sensor_1", 1000, camCallback);
+  ros::Subscriber cam_quality2 = n.subscribe("/ariac/quality_control_sensor_2", 1000, camCallback);
 
+  //creates clients for services
+  ros::ServiceClient begin_client = n.serviceClient<std_srvs::Trigger>("/ariac/start_competition");
   ros::ServiceClient material_location = n.serviceClient<osrf_gear::GetMaterialLocations>("/ariac/material_locations");
   
-  my_bol_var.request.data = true;
+
+  my_bool_var.request.data = true;
 
   service_call_succeeded = begin_client.call(begin_comp);
   if(!service_call_succeeded){
@@ -103,7 +118,7 @@ int main(int argc, char **argv)
     ros::shutdown();
   }
   if(begin_comp.response.success){
-    ROS_INFO("competiton service called successfully %s", \ begin_comp.response.message.c_str());
+    ROS_INFO("Competiton service called successfully %s", begin_comp.response.message.c_str());
   }
   else{
     ROS_ERROR("Competition failed to start, service called");
@@ -127,7 +142,7 @@ int main(int argc, char **argv)
      * in the constructor above.
      */
 //    chatter_pub.publish(msg);
-
+    
     ros::spinOnce();
 
 
@@ -139,7 +154,10 @@ int main(int argc, char **argv)
         for (const auto& product : shipment.products){
           //adds the product type to product_type_vector, and the vector of bins it can be found in to product_bin_vector
           product_type_vector.push_back(product.type);
-          product_bin_vector.push_back(material_locations.call(product.type));
+          osrf_gear::GetMaterialLocations material_locations;
+          material_locations.request.material_type=product.type;
+          material_location.call(material_locations);
+          product_bin_vector.push_back(material_locations.response.storage_units);
         }
       }
     }
@@ -155,4 +173,5 @@ int main(int argc, char **argv)
 
   return 0;
 }
+
 
