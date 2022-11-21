@@ -3,6 +3,10 @@
 #include "std_msgs/String.h"
 #include "std_srvs/Trigger.h"
 #include "std_srvs/SetBool.h"
+#include "geometry_msgs/Pose.h"
+#include "tf2_ros/transform_listener.h"
+#include "tf2_geometry_msgs/tf2_geometry_msgs.h"
+#include "geometry_msgs/TransformStamped.h"
 
 //osrf_gear includes
 #include "osrf_gear/Order.h"
@@ -28,20 +32,23 @@ std_srvs::Trigger begin_comp;
 std_srvs::SetBool my_bool_var;
 
 //osrf_gear stuff
-osrf_gear::LogicalCameraImage cam_image;
+std::vector<osrf_gear::LogicalCameraImage> cam_image_vector;
+
+//tf2 buffer
+tf2_ros::Buffer tfBuffer;
+tf2_ros::TransformListener tfListener(tfBuffer);
 
 //subscriber callbacks
 
-void orderCallback(const osrf_gear::Order::ConstPtr& msg)
+void orderCallback(const osrf_gear::Order::ConstPtr& order)
 {
-  osrf_gear::Order order = *msg;
-  order_vector.push_back(order);
-  ROS_INFO("I recieved an order: [%s]", order.order_id);
+  order_vector.push_back(*order);
+  ROS_INFO("I recieved an order: [%s]", *order.order_id);
   // getting the order ID
 }
 
 void camCallback(const osrf_gear::LogicalCameraImage::ConstPtr& msg){
-  cam_image = *msg;
+  cam_image_vector.push_back(*msg);
 }
 
 //main loop from example wiki code for publisher/subscriber
@@ -51,6 +58,7 @@ int main(int argc, char **argv)
   order_vector.clear();
   product_bin_vector.clear();
   product_type_vector.clear();
+  cam_image_vector.clear();
 
   /**
    * The ros::init() function needs to see argc and argv so that it can perform
@@ -142,7 +150,7 @@ int main(int argc, char **argv)
      * in the constructor above.
      */
 //    chatter_pub.publish(msg);
-    
+    cam_image_vector.clear();
     ros::spinOnce();
 
 
@@ -158,13 +166,85 @@ int main(int argc, char **argv)
           material_locations.request.material_type=product.type;
           material_location.call(material_locations);
           product_bin_vector.push_back(material_locations.response.storage_units);
+
+          std::vector<osrf_gear::Model> cam_image_models;
+          geometry_msgs::Pose product_pose;
+          cam_image_models.clear();
+
+          switch(material_locations.response.storage_units.front().unit_id){
+            case "bin1" :
+              cam_image_models.assign(cam_image_vector.at(0).models);
+              for (const auto& model : cam_image_models){
+                if(model.type.compare(product.type) == 0){
+                  product_pose = model.pose;
+                  break;
+                }
+              }
+              ROS_INFO("Product: %s Bin: bin1 Pose:%s", product.type, product_pose)
+              break;
+
+              case "bin2" :
+              cam_image_models.assign(cam_image_vector.at(1).models);
+              for (const auto& model : cam_image_models){
+                if(model.type.compare(product.type) == 0){
+                  product_pose = model.pose;
+                  break;
+                }
+              }
+              ROS_INFO("Product: %s Bin: bin2 Pose:%s", product.type, product_pose)
+              break;
+
+              case "bin3" :
+              cam_image_models.assign(cam_image_vector.at(2).models);
+              for (const auto& model : cam_image_models){
+                if(model.type.compare(product.type) == 0){
+                  product_pose = model.pose;
+                  break;
+                }
+              }
+              ROS_INFO("Product: %s Bin: bin3 Pose:%s", product.type, product_pose)
+              break;
+
+              case "bin4" :
+              cam_image_models.assign(cam_image_vector.at(3).models);
+              for (const auto& model : cam_image_models){
+                if(model.type.compare(product.type) == 0){
+                  product_pose = model.pose;
+                  break;
+                }
+              }
+              ROS_INFO("Product: %s Bin: bin4 Pose:%s", product.type, product_pose)
+              break;
+
+              case "bin5" :
+              cam_image_models.assign(cam_image_vector.at(4).models);
+              for (const auto& model : cam_image_models){
+                if(model.type.compare(product.type) == 0){
+                  product_pose = model.pose;
+                  break;
+                }
+              }
+              ROS_INFO("Product: %s Bin: bin5 Pose:%s", product.type, product_pose)
+              break;
+
+              case "bin6" :
+              cam_image_models.assign(cam_image_vector.at(5).models);
+              for (const auto& model : cam_image_models){
+                if(model.type.compare(product.type) == 0){
+                  product_pose = model.pose;
+                  break;
+                }
+              }
+              ROS_INFO("Product: %s Bin: bin6 Pose:%s", product.type, product_pose)
+              break;
+          }
         }
       }
     }
     //ROS_INFO prints the first product type and first bin it is found in
     ROS_INFO("The first product is of type : %s,  and is located in the bin : %s", product_type_vector.front(), product_bin_vector.front().front().unit_id);
 
-
+  
 
     loop_rate.sleep();
     ++count;
@@ -173,5 +253,3 @@ int main(int argc, char **argv)
 
   return 0;
 }
-
-
