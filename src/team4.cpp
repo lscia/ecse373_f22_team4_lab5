@@ -7,6 +7,9 @@
 #include "tf2_ros/transform_listener.h"
 #include "tf2_geometry_msgs/tf2_geometry_msgs.h"
 #include "geometry_msgs/TransformStamped.h"
+#include "ur_kinematics/ur_kin.h"
+#include "sensor_msgs/JointState.h"
+#include "trajectory_msgs/JointTrajectory.h"
 
 //osrf_gear includes
 #include "osrf_gear/Order.h"
@@ -42,6 +45,8 @@ int currentCamera = 0;
 tf2_ros::Buffer tfBuffer;
 tf2_ros::TransformListener tfListener(tfBuffer);
 
+sensor_msgs::JointState joint_states;
+trajectory_msgs::JointTrajectory joint_trajectory;
 
 //subscriber callbacks
 void orderCallback(const osrf_gear::Order::ConstPtr& order)
@@ -84,6 +89,10 @@ void q2CamCallback(const osrf_gear::LogicalCameraImage::ConstPtr& msg){
   cam_qs_vector.at(0) = *msg;
 }
 
+void jointCallback(const sensor_msgs::JointState::ConstPtr& current_joint_states) {
+  joint_states = *current_joint_states;
+}
+
 geometry_msgs::PoseStamped part_pose, goal_pose;
 
 //transforms between the arm and logical camera frames
@@ -102,7 +111,7 @@ geometry_msgs::Pose get_product_pose(const std:String& prod_type, const osrf_gea
 {
   //a vector of models for logical cam image data
   std::vector<osrf_gear::Model> cam_image_models;
-  cam_image_models.clear();(need to rewrite logical camera subscribers to use vector or array
+  cam_image_models.clear();
   //a pose to return
   geomtry_msgs::Pose product_pose;
   //store the unit id of the first bin for the product
@@ -151,6 +160,7 @@ void get_products(const osrf_gear::Order& order)
     }
   }
 }
+
 
 
 //main loop from example wiki code for publisher/subscriber
@@ -221,6 +231,8 @@ int main(int argc, char **argv)
   ros::ServiceClient begin_client = n.serviceClient<std_srvs::Trigger>("/ariac/start_competition");
   ros::ServiceClient mat_loc_client = n.serviceClient<osrf_gear::GetMaterialLocations>("/ariac/material_locations");
   
+  //Joint state subscriber
+  ros::Subscriber joint_states_sub = n.subscribe("/ariac/arm1/joint_states", 10, jointCallback);
 
   my_bool_var.request.data = true;
 
@@ -237,11 +249,16 @@ int main(int argc, char **argv)
     ROS_ERROR("Competition failed to start, service called");
   }
 
+
+
   /**
    * A count of how many messages we have sent. This is used to create
    * a unique string for each message.
    */
   int count = 0;
+  ros::MultiThreadedSpinner spinner(4);
+  spinner.spin();
+
   while (ros::ok())
   {
     /**
@@ -256,8 +273,6 @@ int main(int argc, char **argv)
      */
 //    chatter_pub.publish(msg);
     cam_image_vector.clear();
-    ros::spinOnce();
-
 
     //nested for loop over all orders, shipments, and products to find locations with material_location service
     product_type_vector.clear();
@@ -285,6 +300,17 @@ int main(int argc, char **argv)
     goal_pose.pose.orientation.x = 0.0;
     goal_pose.pose.orientation.y = 0.707;
     goal_pose.pose.orientation.z = 0.0;
+
+    T_des[0][3] = desired.pose.position.x;
+    T_des[1][3] = desired.pose.position.y;
+    T_des[2][3] = desired.pose.position.z + 0.3; // above part
+    T_des[3][3] = 1.0;
+      // The orientation of the end effector so that the end effector is down.
+    T_des[0][0] = 0.0; T_des[0][1] = -1.0; T_des[0][2] = 0.0;
+    T_des[1][0] = 0.0; T_des[1][1] = 0.0; T_des[1][2] = 1.0;
+    T_des[2][0] = -1.0; T_des[2][1] = 0.0; T_des[2][2] = 0.0;
+    T_des[3][0] = 0.0; T_des[3][1] = 0.0; T_des[3][2] = 0.0;
+
 
     loop_rate.sleep();
     ++count;
