@@ -46,7 +46,12 @@ tf2_ros::Buffer tfBuffer;
 tf2_ros::TransformListener tfListener(tfBuffer);
 
 sensor_msgs::JointState joint_states;
-trajectory_msgs::JointTrajectory joint_trajectory;
+trajectory_msgs::JointTrajectory desired;
+
+double T_pose[4][4], T_des[4][4];
+double q_pose[6], q_des[8][6];
+int num_sols = 0;
+//ur_kinematics::inverse((double *)&T_des, (double *)&q_des)
 
 //subscriber callbacks
 void orderCallback(const osrf_gear::Order::ConstPtr& order)
@@ -91,6 +96,13 @@ void q2CamCallback(const osrf_gear::LogicalCameraImage::ConstPtr& msg){
 
 void jointCallback(const sensor_msgs::JointState::ConstPtr& current_joint_states) {
   joint_states = *current_joint_states;
+  q_pose[0] = joint_states.position[1];
+  q_pose[1] = joint_states.position[2];
+  q_pose[2] = joint_states.position[3];
+  q_pose[3] = joint_states.position[4];
+  q_pose[4] = joint_states.position[5];
+  q_pose[5] = joint_states.position[6];
+  ur_kinematics::forward((float *)&q_pose, (double *)&T_pose);
 }
 
 geometry_msgs::PoseStamped part_pose, goal_pose;
