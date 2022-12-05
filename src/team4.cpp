@@ -86,11 +86,8 @@ void q2CamCallback(const osrf_gear::LogicalCameraImage::ConstPtr& msg){
 
 geometry_msgs::PoseStamped part_pose, goal_pose;
 
-//part_pose.pose = 
-tf2::doTransform(part_pose, goal_pose, transformStamped);
-
 //transforms between the arm and logical camera frames
-geometry_mgs::TransformStamped get_transform(const std:String& targ_frame, const std:String& orig_frame){ 
+geometry_msgs::TransformStamped get_transform(const std:String& targ_frame, const std:String& orig_frame){ 
   geometry_msgs::TransformStamped tfStamped
   try {
     tfStamped = tfBuffer.lookupTransform(*targ_frame, *orig_frame, ros::Time(0.0), ros::Duration(1.0));
@@ -268,11 +265,26 @@ int main(int argc, char **argv)
     for (const auto& order : order_vector){
       get_products(&order);
     }
-    
+
     //ROS_INFO prints the first product type and first bin it is found in
     ROS_INFO("The first product is of type : %s,  and is located in the bin : %s", product_type_vector.front(), product_bin_vector.front().front().unit_id);
     
-  
+    
+    part_pose.pose = get_product_pose(&product_type_vector.at(0), &product_bin_vector.at(0).at(0));
+    std::String bin = product_bin_vector.at(0).at(0).unit_id;
+    char n = bin[3];
+    std::String cam_frame = "logical_camera";
+    cam_frame.append(n);
+    cam_frame.append("_frame");
+    std::String arm_frame = "arm1_base_frame";
+    geometry_msgs::TransformStamped logical_tf = get_transform(&arm_frame,&cam_frame)
+    tf2::doTransform(&part_pose, &goal_pose, &logical_tf);
+
+    goal_pose.pose.position.z += 0.10;
+    goal_pose.pose.orientation.w = 0.707;
+    goal_pose.pose.orientation.x = 0.0;
+    goal_pose.pose.orientation.y = 0.707;
+    goal_pose.pose.orientation.z = 0.0;
 
     loop_rate.sleep();
     ++count;
