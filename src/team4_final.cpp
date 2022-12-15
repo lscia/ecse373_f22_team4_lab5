@@ -19,6 +19,8 @@
 #include <sstream>
 #include <vector>
 #include <algorithm>
+#include <array>
+
 
 
 
@@ -26,6 +28,7 @@
 
 //Order vector
 std::vector<osrf_gear::Order> orders;
+osrf_gear::Order inc_order;
 
 
 //Logical Cam Arrays
@@ -44,9 +47,8 @@ osrf_gear::LogicalCameraImage cam_qual[2];
 //Order Callback
 void orderCallback(const osrf_gear::Order::ConstPtr& order)
 {
-  osrf_gear::Order o = *order;
-  orders.push_back(o);
-  ROS_INFO("I recieved an order: %s", o.order_id);
+  ROS_INFO("Recieved Order [%s] : # Of Shipments : [%d]", order->order_id.c_str(), order->shipments.size());
+  orders.push_back(*order);
 }
 
 //Bin Camera Callbacks
@@ -154,7 +156,7 @@ int main(int argc, char **argv)
    * You must call one of the versions of ros::init() before using any other
    * part of the ROS system.
    */
-  ros::init(argc, argv, "talker");
+  ros::init(argc, argv, "Team4Final");
 
 
 
@@ -194,7 +196,7 @@ int main(int argc, char **argv)
 
 
   //Subscribe to the Orders topic
-  ros::Subscriber orders_sub = n.subscribe("/ariac/Orders", 1000, orderCallback);
+  ros::Subscriber orders_sub = n.subscribe("/ariac/orders", 1000, orderCallback);
 
   //Subscribe to Logical Camera Topics
   ros::Subscriber cam_bin1_sub = n.subscribe("/ariac/logical_camera_bin1", 1000, bin1CamCallback);
@@ -246,7 +248,7 @@ int main(int argc, char **argv)
 
 
 
-
+  
   /**
    * A count of how many messages we have sent. This is used to create
    * a unique string for each message.
@@ -272,6 +274,7 @@ int main(int argc, char **argv)
     //ROS_INFO the product type, shipment #, order #
 
     //Checks if there are orders, if not ROS_INFO that there arent any
+    /*
     if(!orders.empty())
     {
       std::vector<osrf_gear::Shipment> s;
@@ -298,13 +301,23 @@ int main(int argc, char **argv)
     else if(orders.empty()){
       ROS_INFO("There are no orders currently");
     }
+    */
+    if(!orders.empty()){
+      std::vector<osrf_gear::Shipment> sms;
+      sms.clear();
+      std::vector<osrf_gear::Shipment>& s = sms;
+      osrf_gear::Order& o = orders.at(0);
+      int ships = getShipments(o,s);
+      ROS_INFO("# of Shipments: [%d], First Shipment type: [%s]", ships, s.front().shipment_type.c_str());
+    }
+    else if(orders.empty()){
+      ROS_INFO("There are no orders currently.");
+    }
 
     ros::spinOnce();
 
     loop_rate.sleep();
     ++count;
   }
-
-
   return 0;
 }
