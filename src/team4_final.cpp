@@ -28,7 +28,6 @@
 
 //Order vector
 std::vector<osrf_gear::Order> orders;
-osrf_gear::Order inc_order;
 
 
 //Logical Cam Arrays
@@ -88,9 +87,6 @@ void qual2CamCallback(const osrf_gear::LogicalCameraImage::ConstPtr& msg){
 }
 
 
-
-//Store orders in vector
-//Store camera images in vector or array of [6]
 //Store Joint states
 
 
@@ -136,6 +132,37 @@ int getProducts(osrf_gear::Shipment &s, std::vector<osrf_gear::Product> &p)
 }
 
 
+/* Prints out all Orders, Shipments, and Products
+* Inputs: None
+* Outputs total number of products
+*/
+void allProducts()
+{
+  if(!orders.empty()){
+    for(const auto& order : orders)
+    {
+      ROS_INFO("ORDER ID: [%s]", order.order_id.c_str());
+      ROS_INFO("-------------");
+      if(!order.shipments.empty())
+      {
+        for(const auto& shipment : order.shipments)
+        {
+          ROS_INFO("SHIPMENT ID: [%s]", shipment.shipment_type.c_str());
+          ROS_INFO("-------------");
+          if(!shipment.products.empty())
+          {
+            for(const auto& product : shipment.products)
+            {
+              ROS_INFO("PRODUCT TYPE: [%s]", product.type.c_str());
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+
 //Make function to find where a product is and return the bin it is in or its pose
 
 
@@ -156,7 +183,7 @@ int main(int argc, char **argv)
    * You must call one of the versions of ros::init() before using any other
    * part of the ROS system.
    */
-  ros::init(argc, argv, "Team4Final");
+  ros::init(argc, argv, "team4_final");
 
 
 
@@ -225,7 +252,7 @@ int main(int argc, char **argv)
 
 
 
-  /*
+  
   //Services Stuff
   int service_call_succeeded;
   std_srvs::Trigger begin_comp;
@@ -233,18 +260,19 @@ int main(int argc, char **argv)
   my_bool_var.request.data = true;
 
   //call start_competition service
+  begin_client.waitForExistence();
   service_call_succeeded = begin_client.call(begin_comp);
   if(!service_call_succeeded){
     ROS_ERROR("Competition service call failed");
     ros::shutdown();
   }
   if(begin_comp.response.success){
-    ROS_INFO("Competiton service called successfully %s", begin_comp.response.message.c_str());
+    ROS_INFO("Competiton service called successfully [%s]", begin_comp.response.message.c_str());
   }
   else{
     ROS_ERROR("Competition failed to start, service called");
   }
-  */
+  
 
 
 
@@ -273,46 +301,6 @@ int main(int argc, char **argv)
     //Find first product in shipment
     //ROS_INFO the product type, shipment #, order #
 
-    //Checks if there are orders, if not ROS_INFO that there arent any
-    /*
-    if(!orders.empty())
-    {
-      std::vector<osrf_gear::Shipment> s;
-      s.clear();
-      int ships = getShipments(orders[0], s);
-      if(!s.empty())
-      {
-        std::vector<osrf_gear::Product> p;
-        p.clear();
-        int prods = getProducts(s[0], p);
-        if(!p.empty())
-        {
-          ROS_INFO("The first product is of type : %s in shipment of type: %s in order : %s", p[0].type, s[0].shipment_type, orders[0].order_id);
-          ROS_INFO("Orders: %s  Shipments in first Order : %s  Products in first shipment : %s", orders.size(), ships, prods);        
-        }
-        else if (p.empty()){
-        ROS_INFO("There are no products in this shipment");
-        }
-      }
-      else if (s.empty()){
-        ROS_INFO("There are no shipments in this order");
-      }
-    }
-    else if(orders.empty()){
-      ROS_INFO("There are no orders currently");
-    }
-    */
-    if(!orders.empty()){
-      std::vector<osrf_gear::Shipment> sms;
-      sms.clear();
-      std::vector<osrf_gear::Shipment>& s = sms;
-      osrf_gear::Order& o = orders.at(0);
-      int ships = getShipments(o,s);
-      ROS_INFO("# of Shipments: [%d], First Shipment type: [%s]", ships, s.front().shipment_type.c_str());
-    }
-    else if(orders.empty()){
-      ROS_INFO("There are no orders currently.");
-    }
 
     ros::spinOnce();
 
