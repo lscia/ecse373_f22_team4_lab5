@@ -31,7 +31,10 @@
 #include "trajectory_msgs/JointTrajectory.h"
 #include "ur_kinematics/ur_kin.h"
 
-
+//Action Service Includes
+#include "actionlib/client/simple_action_client.h"
+#include "actionlib/client/terminal_state.h"
+#include "control_msgs/FollowJointTrajectoryAction.h"
 
 //STORAGE OF DATA
 
@@ -111,6 +114,7 @@ void jointCallback(const sensor_msgs::JointState::ConstPtr& current_joint_states
 int main(int argc, char **argv)
 {
 
+
   //VARIABLES
 
   //Create a pose to store the product pose with respect to (WRT) the camera
@@ -135,6 +139,9 @@ int main(int argc, char **argv)
   //Joint Trajectory Message
   trajectory_msgs::JointTrajectory joint_trajectory;
 
+  //Joint Trajectory Action Server
+  control_msgs::FollowJointTrajectoryAction joint_trajectory_as;
+
   //Clears all vectors
   orders.clear();
 
@@ -144,6 +151,11 @@ int main(int argc, char **argv)
   //Ros Node 
   ros::init(argc, argv, "team4_final");
   ros::NodeHandle n;
+
+
+  //Multi Threaded Spinner Stuff
+  ros::AsyncSpinner spinner(4);
+  spinner.start();
 
 
   //Subscribe to the Orders topic
@@ -179,6 +191,11 @@ int main(int argc, char **argv)
   tf2_ros::Buffer tfBuffer;
   tf2_ros::TransformListener tfListener(tfBuffer);
 
+  //Action Server
+  actionlib::SimpleActionClient<control_msgs::FollowJointTrajectoryAction>trajectory_as("ariac/arm1/arm/follow_joint_trajectory", true);
+  ROS_INFO("WAITING FOR ACTION SERVER");
+  trajectory_as.waitForServer();
+  ROS_INFO("ACTION SERVER STARTED");
 
   ros::Rate loop_rate(10);
 
@@ -205,10 +222,6 @@ int main(int argc, char **argv)
     ROS_ERROR("Competition failed to start, service called");
   }
   
-  //Multi Threaded Spinner Stuff
-  ros::AsyncSpinner spinner(4);
-  spinner.start();
-
   //MAIN LOOP
 
   int count = 0;
@@ -360,10 +373,19 @@ int main(int argc, char **argv)
               }
 
               // How long to take for the movement.
-              joint_trajectory.points[1].time_from_start = ros::Duration(1.0);
+              joint_trajectory.points[1].time_from_start = ros::Duration(30.0);
 
 
-              //Publish trajectory to make arm to move to goal pose
+              //Trajectory action server to make arm to move to goal pose
+              joint_trajectory_as.action_goal.goal.trajectory = joint_trajectory;
+              joint_trajectory_as.action_goal.header.seq = count++;
+              joint_trajectory_as.action_goal.header.stamp = ros::Time::now();
+              joint_trajectory_as.action_goal.header.frame_id = "/world";
+              joint_trajectory_as.action_goal.goal_id.stamp = ros::Time::now();
+              joint_trajectory_as.action_goal.goal_id.id = std::to_string(count -1);
+
+              actionlib::SimpleClientGoalState state = trajectory_as.sendGoalAndWait(joint_trajectory_as.action_goal.goal, ros::Duration(30.0), ros::Duration(30.0));
+              ROS_INFO("Action Server returned with status: [%i] %s", state.state_, state.toString().c_str());
 
 
 
