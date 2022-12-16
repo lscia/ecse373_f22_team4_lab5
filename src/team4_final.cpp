@@ -15,15 +15,16 @@
 #include "osrf_gear/LogicalCameraImage.h"
 #include "osrf_gear/GetMaterialLocations.h"
 
-//Geometry Includes
-#include "geometry_msgs/Pose.h"
-
 //CPP Includes
 #include <sstream>
 #include <vector>
 #include <algorithm>
 #include <array>
+#include <string>
 
+//Other Includes
+#include "geometry_msgs/Pose.h"
+#include "sensor_msgs/JointState.h"
 
 
 
@@ -39,7 +40,7 @@ osrf_gear::LogicalCameraImage cam_agvs[2];
 osrf_gear::LogicalCameraImage cam_qual[2];
 
 //Joint States Storage
-
+sensor_msgs::JointState joint_states;
 
 
 
@@ -89,128 +90,26 @@ void qual2CamCallback(const osrf_gear::LogicalCameraImage::ConstPtr& msg){
   cam_qual[1] = *msg;
 }
 
-
-
-
-/* Gets all shipments in an order
-* Inputs: Pointer to Order, Pointer to Shipment Vector
-* Outputs length of shipment vector as integer
-* Clears the shipments vector, fills it with shipments
-* from given Order
-*/
-int getShipments(osrf_gear::Order &o, std::vector<osrf_gear::Shipment> &s)
-{
-  s.clear();
-  if(!o.shipments.empty()){
-    for (const auto& shipment : o.shipments){
-      s.push_back(shipment);
-    }
-    return o.shipments.size();
-  }
-  else{
-    return 0;
-  }
-}
-
-/* Gets all products in a shipment
-* Inputs: Pointer to Shipment, Pointer to Product Vector
-* Outputs length of Product vector as integer
-* Clears the Products vector, fills it with Products
-* from given Shipment
-*/
-int getProducts(osrf_gear::Shipment &s, std::vector<osrf_gear::Product> &p)
-{
-  p.clear();
-  if(!s.products.empty()){
-    for (const auto& product : s.products){
-      p.push_back(product);
-    }
-    return s.products.size();
-  }
-  else{
-    return 0;
-  }
-}
-
-
-/* Prints out all Orders, Shipments, and Products
-* Inputs: None
-* Outputs total number of products
-*/
-void allProducts()
-{
-  
+//Joint State Callback
+void jointCallback(const sensor_msgs::JointState::ConstPtr& current_joint_states) {
+  joint_states.name = current_joint_states->name;
+  joint_states.position = current_joint_states->position;
+  joint_states.velocity = current_joint_states->velocity;
+  joint_states.effort = current_joint_states->effort;
 }
 
 
 
-/*
-/* Finds the pose of a desired product type from a camera image
-* Inputs: Camera #, pointer to product
-* Outputs the pose with respect to the camera
-*
-int findProductBin(osrf_gear::Product& p)
-{
-}
-*/
-
-
-
-
+//MAIN FUNCTION
 int main(int argc, char **argv)
 {
 
   //Clears all vectors
   orders.clear();
 
-
-  /**
-   * The ros::init() function needs to see argc and argv so that it can perform
-   * any ROS arguments and name remapping that were provided at the command line.
-   * For programmatic remappings you can use a different version of init() which takes
-   * remappings directly, but for most command-line programs, passing argc and argv is
-   * the easiest way to do it.  The third argument to init() is the name of the node.
-   *
-   * You must call one of the versions of ros::init() before using any other
-   * part of the ROS system.
-   */
+  //Ros Node 
   ros::init(argc, argv, "team4_final");
-
-
-
-  /**
-   * NodeHandle is the main access point to communications with the ROS system.
-   * The first NodeHandle constructed will fully initialize this node, and the last
-   * NodeHandle destructed will close down the node.
-   */
   ros::NodeHandle n;
-
-
-
-
-  /**
-   * The advertise() function is how you tell ROS that you want to
-   * publish on a given topic name. This invokes a call to the ROS
-   * master node, which keeps a registry of who is publishing and who
-   * is subscribing. After this advertise() call is made, the master
-   * node will notify anyone who is trying to subscribe to this topic name,
-   * and they will in turn negotiate a peer-to-peer connection with this
-   * node.  advertise() returns a Publisher object which allows you to
-   * publish messages on that topic through a call to publish().  Once
-   * all copies of the returned Publisher object are destroyed, the topic
-   * will be automatically unadvertised.
-   *
-   * The second parameter to advertise() is the size of the message queue
-   * used for publishing messages.  If messages are published more quickly
-   * than we can send them, the number here specifies how many messages to
-   * buffer up before throwing some away.
-   */
-
-
-
-
-   
-  //ros::Publisher chatter_pub = n.advertise<std_msgs::String>("chatter", 1000);
 
 
   //Subscribe to the Orders topic
@@ -238,12 +137,10 @@ int main(int argc, char **argv)
   //Service to get material locations
   ros::ServiceClient mat_loc_client = n.serviceClient<osrf_gear::GetMaterialLocations>("/ariac/material_locations");
   
+  //ros::Publisher chatter_pub = n.advertise<std_msgs::String>("chatter", 1000);
 
   ros::Rate loop_rate(10);
 
-
-
-  
   //Services Stuff
   int service_call_succeeded;
   std_srvs::Trigger begin_comp;
@@ -265,43 +162,27 @@ int main(int argc, char **argv)
   }
   
 
-
-
-  
-  /**
-   * A count of how many messages we have sent. This is used to create
-   * a unique string for each message.
-   */
+  //MAIN LOOP
   int count = 0;
   while (ros::ok())
   {
 
+
+    ros::spinOnce();
     
-
-      /**
-     * The publish() function is how you send messages. The parameter
-     * is the message object. The type of this object must agree with the type
-     * given as a template parameter to the advertise<>() call, as was done
-     * in the constructor above.
-     */
-    //chatter_pub.publish(msg);
-
-
-    
-
     //Iterate through all orders
     if(!orders.empty()){
     for(const auto& order : orders)
     {
-      ROS_INFO("ORDER ID: [%s]", order.order_id.c_str());
       ROS_INFO("-------------");
+      ROS_INFO("ORDER ID: [%s]", order.order_id.c_str());
       if(!order.shipments.empty())
       {
         //Iterate through all shipments in order
         for(const auto& shipment : order.shipments)
         {
+          ROS_INFO("--------");
           ROS_INFO("SHIPMENT ID: [%s]", shipment.shipment_type.c_str());
-          ROS_INFO("-------------");
           if(!shipment.products.empty())
           {
             //Iterate through all products in shipment
@@ -327,24 +208,27 @@ int main(int argc, char **argv)
 
 
               //Find the camera for that bin
-              osrf_gear::LogicalCameraImage bin_image = cam_bins[n];
+              osrf_gear::LogicalCameraImage bin_image = cam_bins[n-1];
+
+              //Create a pose to store the product pose with respect to (WRT) the camera
               geometry_msgs::Pose product_pose_wrt_camera;
 
               //Find all the materials from that cameras view
               for(const auto& model : bin_image.models)
               {
-                //Get the pose of the product from that camera image
-                if(model.type.compare(product.type) == 0)
+                //Search for the first desired product
+                if(model.type == product.type)
                 {
+                  //Get the pose of the product from that camera image
                   product_pose_wrt_camera = model.pose;
                 }
               }
+              
 
-              ROS_INFO("PRODUCT IS AT x: %d y: %d z: %d WRT CAMERA", product_pose_wrt_camera.position.x, product_pose_wrt_camera.position.y, product_pose_wrt_camera.position.z);
+              ROS_INFO("PRODUCT IS AT x: %s y: %d z: %d WRT CAMERA", std::to_string(product_pose_wrt_camera.position.x).c_str(), std::to_string(product_pose_wrt_camera.position.y).c_str(), std::to_string(product_pose_wrt_camera.position.z).c_str());
               
               //Get the transform from that camera to the arm
               
-
 
               //Apply the transform to get the goal pose
 
@@ -355,26 +239,24 @@ int main(int argc, char **argv)
               //filter IK results
 
 
-              //Command arm to move to goal pose
+              //Create trajectory message
+
+
+              //Publish trajectory to make arm to move to goal pose
 
 
 
 
 
-
-
-
-
-
+              }
             }
           }
         }
       }
     }
-  }
-  
-    ros::spinOnce();
 
+    //chatter_pub.publish(msg);
+  
     loop_rate.sleep();
     ++count;
   }

@@ -1,7 +1,11 @@
 <launch>
+
     <arg name="ecse_launch_file" default="$(find ecse_373_ariac)/launch/ecse_373_ariac.launch" />
+    
     <include file="$(arg ecse_launch_file)">
         <arg name="python" default="false" />
     </include>
+
     <node name="team4_final" pkg="team4_final" type="team4_final_node" />
+
 </launch>
