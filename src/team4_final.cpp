@@ -15,6 +15,9 @@
 #include "osrf_gear/LogicalCameraImage.h"
 #include "osrf_gear/GetMaterialLocations.h"
 
+//Geometry Includes
+#include "geometry_msgs/Pose.h"
+
 //CPP Includes
 #include <sstream>
 #include <vector>
@@ -35,10 +38,10 @@ osrf_gear::LogicalCameraImage cam_bins[6];
 osrf_gear::LogicalCameraImage cam_agvs[2];
 osrf_gear::LogicalCameraImage cam_qual[2];
 
-
-
-
 //Joint States Storage
+
+
+
 
 
 //CALLBACKS
@@ -86,8 +89,6 @@ void qual2CamCallback(const osrf_gear::LogicalCameraImage::ConstPtr& msg){
   cam_qual[1] = *msg;
 }
 
-
-//Store Joint states
 
 
 
@@ -138,32 +139,22 @@ int getProducts(osrf_gear::Shipment &s, std::vector<osrf_gear::Product> &p)
 */
 void allProducts()
 {
-  if(!orders.empty()){
-    for(const auto& order : orders)
-    {
-      ROS_INFO("ORDER ID: [%s]", order.order_id.c_str());
-      ROS_INFO("-------------");
-      if(!order.shipments.empty())
-      {
-        for(const auto& shipment : order.shipments)
-        {
-          ROS_INFO("SHIPMENT ID: [%s]", shipment.shipment_type.c_str());
-          ROS_INFO("-------------");
-          if(!shipment.products.empty())
-          {
-            for(const auto& product : shipment.products)
-            {
-              ROS_INFO("PRODUCT TYPE: [%s]", product.type.c_str());
-            }
-          }
-        }
-      }
-    }
-  }
+  
 }
 
 
-//Make function to find where a product is and return the bin it is in or its pose
+
+/*
+/* Finds the pose of a desired product type from a camera image
+* Inputs: Camera #, pointer to product
+* Outputs the pose with respect to the camera
+*
+int findProductBin(osrf_gear::Product& p)
+{
+}
+*/
+
+
 
 
 int main(int argc, char **argv)
@@ -296,12 +287,92 @@ int main(int argc, char **argv)
     //chatter_pub.publish(msg);
 
 
-    //Find first order
-    //Find first shipment in order
-    //Find first product in shipment
-    //ROS_INFO the product type, shipment #, order #
+    
+
+    //Iterate through all orders
+    if(!orders.empty()){
+    for(const auto& order : orders)
+    {
+      ROS_INFO("ORDER ID: [%s]", order.order_id.c_str());
+      ROS_INFO("-------------");
+      if(!order.shipments.empty())
+      {
+        //Iterate through all shipments in order
+        for(const auto& shipment : order.shipments)
+        {
+          ROS_INFO("SHIPMENT ID: [%s]", shipment.shipment_type.c_str());
+          ROS_INFO("-------------");
+          if(!shipment.products.empty())
+          {
+            //Iterate through all products in shipment
+            for(const auto& product : shipment.products)
+            {
+
+              //Find the bin of the product using get_mat_loc client
+              int n;
+              osrf_gear::GetMaterialLocations get_mat_loc;
+              get_mat_loc.request.material_type = product.type;
+              mat_loc_client.call(get_mat_loc);
+              std::string bin;
+              n = 0;
+              for(const auto& unit : get_mat_loc.response.storage_units){
+                if(unit.unit_id.compare("belt") != 0){
+                  n = unit.unit_id[3] - '0';
+                  break;
+                }
+              }
+              
+              ROS_INFO("PRODUCT TYPE: [%s] IS IN BIN: [%d]", product.type.c_str(), n);
 
 
+
+              //Find the camera for that bin
+              osrf_gear::LogicalCameraImage bin_image = cam_bins[n];
+              geometry_msgs::Pose product_pose_wrt_camera;
+
+              //Find all the materials from that cameras view
+              for(const auto& model : bin_image.models)
+              {
+                //Get the pose of the product from that camera image
+                if(model.type.compare(product.type) == 0)
+                {
+                  product_pose_wrt_camera = model.pose;
+                }
+              }
+
+              ROS_INFO("PRODUCT IS AT x: %d y: %d z: %d WRT CAMERA", product_pose_wrt_camera.position.x, product_pose_wrt_camera.position.y, product_pose_wrt_camera.position.z);
+              
+              //Get the transform from that camera to the arm
+              
+
+
+              //Apply the transform to get the goal pose
+
+
+              //Send the goal pose to IK
+
+
+              //filter IK results
+
+
+              //Command arm to move to goal pose
+
+
+
+
+
+
+
+
+
+
+            }
+          }
+        }
+      }
+    }
+  }
+  
     ros::spinOnce();
 
     loop_rate.sleep();
