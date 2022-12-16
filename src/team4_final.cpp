@@ -48,21 +48,6 @@ osrf_gear::LogicalCameraImage cam_qual[2];
 sensor_msgs::JointState joint_states;
 
 
-//Create a pose to store the product pose with respect to (WRT) the camera
-geometry_msgs::Pose product_pose_wrt_camera;
-
-//Create a pose to store the product pose wrt the arm base
-geometry_msgs::Pose product_pose_wrt_arm;
-
-//Camera image for the current bin
-osrf_gear::LogicalCameraImage bin_image;
-
-//Transform for converting from the camera frame to the arm frame
-geometry_msgs::TransformStamped tfStamped;
-
-//String for camera frame name
-std::string cam_frame;
-
 
 
 //CALLBACKS
@@ -120,12 +105,41 @@ void jointCallback(const sensor_msgs::JointState::ConstPtr& current_joint_states
 
 
 
+
 //MAIN FUNCTION
+
 int main(int argc, char **argv)
 {
 
+  //VARIABLES
+
+  //Create a pose to store the product pose with respect to (WRT) the camera
+  geometry_msgs::Pose product_pose_wrt_camera;
+
+  //Create a pose to store the product pose wrt the arm base
+  geometry_msgs::Pose product_pose_wrt_arm;
+
+  //Camera image for the current bin
+  osrf_gear::LogicalCameraImage bin_image;
+
+  //Transform for converting from the camera frame to the arm frame
+  geometry_msgs::TransformStamped tfStamped;
+
+  //String for camera frame name
+  std::string cam_frame;
+
+  //Kinematics variables
+  double T_pose[4][4], T_des[4][4];
+  double q_pose[6], q_des[8][6];
+
+  //Joint Trajectory Message
+  trajectory_msgs::JointTrajectory joint_trajectory;
+
   //Clears all vectors
   orders.clear();
+
+
+  //ROS NODE SETUP
 
   //Ros Node 
   ros::init(argc, argv, "team4_final");
@@ -150,6 +164,7 @@ int main(int argc, char **argv)
   ros::Subscriber cam_qual2_sub = n.subscribe("/ariac/quality_control_sensor_2", 1000, qual2CamCallback);
 
   //Subscribe to the Joint State Topic
+  ros::Subscriber joint_states_sub = n.subscribe("/ariac/arm1/joint_states", 1000, jointCallback);
 
   //Service to start comp
   ros::ServiceClient begin_client = n.serviceClient<std_srvs::Trigger>("/ariac/start_competition");
@@ -157,7 +172,7 @@ int main(int argc, char **argv)
   //Service to get material locations
   ros::ServiceClient mat_loc_client = n.serviceClient<osrf_gear::GetMaterialLocations>("/ariac/material_locations");
   
-  //ros::Publisher chatter_pub = n.advertise<std_msgs::String>("chatter", 1000);
+  //ros::Publisher joint_trajectory_pub = n.advertise<trajectory_msgs::JointTrajectory>("", 1000);
 
 
   //Transform Buffer and Listener
@@ -166,6 +181,9 @@ int main(int argc, char **argv)
 
 
   ros::Rate loop_rate(10);
+
+
+  //STARTING THE COMPETITION
 
   //Services Stuff
   int service_call_succeeded;
@@ -187,17 +205,16 @@ int main(int argc, char **argv)
     ROS_ERROR("Competition failed to start, service called");
   }
   
+  //Multi Threaded Spinner Stuff
+  ros::AsyncSpinner spinner(4);
+  spinner.start();
 
   //MAIN LOOP
+
   int count = 0;
   while (ros::ok())
   {
 
-
-    ros::spinOnce();
-    ros::spinOnce();
-    ros::spinOnce();
-    ros::spinOnce();
     
     //Iterate through all orders
     if(!orders.empty()){
@@ -270,19 +287,80 @@ int main(int argc, char **argv)
 
               //Apply the transform to get the goal pose and correct it slightly
               tf2::doTransform(product_pose_wrt_camera, product_pose_wrt_arm, tfStamped);
-              product_pose_wrt_arm.pose.position.z += 0.10; //Move 10 Cm above the part
-              product_pose_wrt_arm.pose.orientation.w = 0.707; //Rotate the effector 90 deg around the y axis
-              product_pose_wrt_arm.pose.orientation.x = 0.0;
-              product_pose_wrt_arm.pose.orientation.y = 0.707;
-              product_pose_wrt_arm.pose.orientation.z = 0.0;
+              product_pose_wrt_arm.position.z += 0.10; //Move 10 Cm above the part
+              product_pose_wrt_arm.orientation.w = 0.707; //Rotate the effector 90 deg around the y axis
+              product_pose_wrt_arm.orientation.x = 0.0;
+              product_pose_wrt_arm.orientation.y = 0.707;
+              product_pose_wrt_arm.orientation.z = 0.0;
+
+
+              //get current pose using forwards kinematics
+              q_pose[0] = joint_states.position[1];
+              q_pose[1] = joint_states.position[2];
+              q_pose[2] = joint_states.position[3];
+              q_pose[3] = joint_states.position[4];
+              q_pose[4] = joint_states.position[5];
+              q_pose[5] = joint_states.position[6];
+              ur_kinematics::forward((double *)&q_pose, (double *)&T_pose);
 
               //Send the goal pose to IK
-
+              T_des[0][0] = 0.0;  T_des[0][1] = -1.0; T_des[0][2] = 0.0;  T_des[0][3] = product_pose_wrt_arm.position.x;
+              T_des[1][0] = 0.0;  T_des[1][1] = 0.0;  T_des[1][2] = 1.0;  T_des[1][3] = product_pose_wrt_arm.position.y;
+              T_des[2][0] = -1.0; T_des[2][1] = 0.0;  T_des[2][2] = 0.0;  T_des[2][3] = product_pose_wrt_arm.position.z;
+              T_des[3][0] = 0.0;  T_des[3][1] = 0.0;  T_des[3][2] = 0.0;  T_des[3][3] = 1.0;
+              int num_sols = ur_kinematics::inverse((double *)&T_des, (double *)&q_des);
 
               //filter IK results
 
 
-              //Create trajectory message
+              //Create trajectory message and fill out header
+              joint_trajectory.header.seq = count++;
+              joint_trajectory.header.stamp = ros::Time::now();
+              joint_trajectory.header.frame_id = "/world";
+
+              //Fill out names of joints
+              joint_trajectory.joint_names.clear();
+              joint_trajectory.joint_names.push_back("linear_arm_actuator_joint");
+              joint_trajectory.joint_names.push_back("shoulder_pan_joint");
+              joint_trajectory.joint_names.push_back("shoulder_lift_joint");
+              joint_trajectory.joint_names.push_back("elbow_joint");
+              joint_trajectory.joint_names.push_back("wrist_1_joint");
+              joint_trajectory.joint_names.push_back("wrist_2_joint");
+              joint_trajectory.joint_names.push_back("wrist_3_joint");
+
+              //Start and end points
+              joint_trajectory.points.clear();
+              joint_trajectory.points.resize(2);
+              // Set the start point to the current position of the joints from joint_states.
+              joint_trajectory.points[0].positions.resize(joint_trajectory.joint_names.size());
+              for (int indy = 0; indy < joint_trajectory.joint_names.size(); indy++) {
+                for (int indz = 0; indz < joint_states.name.size(); indz++) {
+                  if (joint_trajectory.joint_names[indy] == joint_states.name[indz]) {
+                    joint_trajectory.points[0].positions[indy] = joint_states.position[indz];
+                    break;
+                  }
+                }
+              }
+
+              //When to start 
+              joint_trajectory.points[0].time_from_start = ros::Duration(0.0);
+
+              // Must select which of the num_sols solutions to use.  Just start with the first.
+              int q_des_indx = 0;
+
+              // Set the end point for the movement
+              joint_trajectory.points[1].positions.resize(joint_trajectory.joint_names.size());
+
+              // Set the linear_arm_actuator_joint from joint_states as it is not part of the inverse kinematics solution.
+              joint_trajectory.points[1].positions[0] = joint_states.position[1];
+
+              // The actuators are commanded in an odd order, enter the joint positions in the correct positions
+              for (int indy = 0; indy < 6; indy++) {
+                joint_trajectory.points[1].positions[indy + 1] = q_des[q_des_indx][indy];
+              }
+
+              // How long to take for the movement.
+              joint_trajectory.points[1].time_from_start = ros::Duration(1.0);
 
 
               //Publish trajectory to make arm to move to goal pose

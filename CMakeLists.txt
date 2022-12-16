@@ -13,6 +13,8 @@ find_package(catkin REQUIRED COMPONENTS
   rviz
   std_msgs
   std_srvs
+  sensor_msgs
+  ur_kinematics
 )
 
 ## System dependencies are found with CMake's conventions
@@ -120,6 +122,7 @@ catkin_package(
 include_directories(
 # include
   ${catkin_INCLUDE_DIRS}
+  include
 )
 
 ## Declare a C++ library
@@ -148,9 +151,9 @@ add_executable(team4_final_node src/team4_final.cpp)
 # add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
-# target_link_libraries(${PROJECT_NAME}_node
-#   ${catkin_LIBRARIES}
-# )
+target_link_libraries(team4_final_node
+  ${catkin_LIBRARIES}
+)
 
 #############
 ## Install ##
@@ -203,7 +206,7 @@ add_executable(team4_final_node src/team4_final.cpp)
 # if(TARGET ${PROJECT_NAME}-test)
 #   target_link_libraries(${PROJECT_NAME}-test ${PROJECT_NAME})
 # endif()
-target_link_libraries(team4_final_node ${catkin_LIBRARIES})
+#target_link_libraries(team4_final_node ${catkin_LIBRARIES})
 
 ## Add folders to be run by python nosetests
 # catkin_add_nosetests(test)
