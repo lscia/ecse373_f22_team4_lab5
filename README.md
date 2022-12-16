@@ -16,3 +16,4 @@ The node for this project has a few functionalities:
 It keeps track of all orders, shipments, and products.
 It stores all current joint states
 It finds the bins in which products are located and searches through the associated cameras to find the pose of each product.
+It finds the pose of each product with respect to the arm base and adds an offset for the end effector.

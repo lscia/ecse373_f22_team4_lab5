@@ -25,6 +25,11 @@
 //Other Includes
 #include "geometry_msgs/Pose.h"
 #include "sensor_msgs/JointState.h"
+#include "tf2_ros/transform_listener.h"
+#include "tf2_geometry_msgs/tf2_geometry_msgs.h"
+#include "geometry_msgs/TransformStamped.h"
+#include "trajectory_msgs/JointTrajectory.h"
+#include "ur_kinematics/ur_kin.h"
 
 
 
@@ -42,6 +47,21 @@ osrf_gear::LogicalCameraImage cam_qual[2];
 //Joint States Storage
 sensor_msgs::JointState joint_states;
 
+
+//Create a pose to store the product pose with respect to (WRT) the camera
+geometry_msgs::Pose product_pose_wrt_camera;
+
+//Create a pose to store the product pose wrt the arm base
+geometry_msgs::Pose product_pose_wrt_arm;
+
+//Camera image for the current bin
+osrf_gear::LogicalCameraImage bin_image;
+
+//Transform for converting from the camera frame to the arm frame
+geometry_msgs::TransformStamped tfStamped;
+
+//String for camera frame name
+std::string cam_frame;
 
 
 
@@ -139,6 +159,12 @@ int main(int argc, char **argv)
   
   //ros::Publisher chatter_pub = n.advertise<std_msgs::String>("chatter", 1000);
 
+
+  //Transform Buffer and Listener
+  tf2_ros::Buffer tfBuffer;
+  tf2_ros::TransformListener tfListener(tfBuffer);
+
+
   ros::Rate loop_rate(10);
 
   //Services Stuff
@@ -169,6 +195,9 @@ int main(int argc, char **argv)
 
 
     ros::spinOnce();
+    ros::spinOnce();
+    ros::spinOnce();
+    ros::spinOnce();
     
     //Iterate through all orders
     if(!orders.empty()){
@@ -189,6 +218,8 @@ int main(int argc, char **argv)
             for(const auto& product : shipment.products)
             {
 
+              
+
               //Find the bin of the product using get_mat_loc client
               int n;
               osrf_gear::GetMaterialLocations get_mat_loc;
@@ -208,10 +239,7 @@ int main(int argc, char **argv)
 
 
               //Find the camera for that bin
-              osrf_gear::LogicalCameraImage bin_image = cam_bins[n-1];
-
-              //Create a pose to store the product pose with respect to (WRT) the camera
-              geometry_msgs::Pose product_pose_wrt_camera;
+              bin_image = cam_bins[n-1];
 
               //Find all the materials from that cameras view
               for(const auto& model : bin_image.models)
@@ -225,13 +253,28 @@ int main(int argc, char **argv)
               }
               
 
-              ROS_INFO("PRODUCT IS AT x: %s y: %d z: %d WRT CAMERA", std::to_string(product_pose_wrt_camera.position.x).c_str(), std::to_string(product_pose_wrt_camera.position.y).c_str(), std::to_string(product_pose_wrt_camera.position.z).c_str());
+              ROS_INFO("PRODUCT IS AT x: %s y: %s z: %s WRT CAMERA", std::to_string(product_pose_wrt_camera.position.x).c_str(), std::to_string(product_pose_wrt_camera.position.y).c_str(), std::to_string(product_pose_wrt_camera.position.z).c_str());
               
-              //Get the transform from that camera to the arm
-              
+              //Find the reference frame of the correct camera
+              cam_frame = "logical_camera_bin";
+              cam_frame.append(std::to_string(n));
+              cam_frame.append("_frame");
 
-              //Apply the transform to get the goal pose
+              //Get the transform from that camera to the arm base
+              try {
+                tfStamped = tfBuffer.lookupTransform("arm1_base", cam_frame, ros::Time(0.0), ros::Duration(1.0));
+                ROS_INFO("Transform to [%s] from [%s}]", tfStamped.header.frame_id.c_str(), tfStamped.child_frame_id.c_str());
+              } catch (tf2::TransformException &ex) {
+                ROS_ERROR("%s", ex.what());
+              }
 
+              //Apply the transform to get the goal pose and correct it slightly
+              tf2::doTransform(product_pose_wrt_camera, product_pose_wrt_arm, tfStamped);
+              product_pose_wrt_arm.pose.position.z += 0.10; //Move 10 Cm above the part
+              product_pose_wrt_arm.pose.orientation.w = 0.707; //Rotate the effector 90 deg around the y axis
+              product_pose_wrt_arm.pose.orientation.x = 0.0;
+              product_pose_wrt_arm.pose.orientation.y = 0.707;
+              product_pose_wrt_arm.pose.orientation.z = 0.0;
 
               //Send the goal pose to IK
 
