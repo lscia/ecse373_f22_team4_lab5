@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.0.2)
 project(team4_final)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
-# add_compile_options(-std=c++11)
+add_compile_options(-std=c++11)
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
@@ -155,6 +155,7 @@ add_executable(team4_final_node src/team4_final.cpp)
 ## Specify libraries to link a library or executable target against
 target_link_libraries(team4_final_node
   ${catkin_LIBRARIES}
+  #ur10_kin
 )
 
 #############
