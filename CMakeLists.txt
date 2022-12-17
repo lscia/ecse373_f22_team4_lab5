@@ -155,7 +155,7 @@ add_executable(team4_final_node src/team4_final.cpp)
 ## Specify libraries to link a library or executable target against
 target_link_libraries(team4_final_node
   ${catkin_LIBRARIES}
-  #ur10_kin
+  ur10_kin
 )
 
 #############

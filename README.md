@@ -3,7 +3,7 @@
 
 ## Luca and Bethany
 
-So far, it has covered almost all of the lab 6 material.
+This redo covers all of lab 5 and lab 6. Lab 7 is still in progress.
 
 
 ## LAUNCH INSTRUCTIONS
