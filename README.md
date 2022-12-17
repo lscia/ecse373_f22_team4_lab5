@@ -1,7 +1,6 @@
-This is the REDO of lab 5,6,and 7.
+#This is the redo of lab 5,6,and 7.
 
-Luca 
-Bethany
+##Luca and Bethany
 
 
 There is a launch file included called team4_final.launch.

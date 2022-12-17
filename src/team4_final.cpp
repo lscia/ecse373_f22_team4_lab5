@@ -36,20 +36,22 @@
 #include "actionlib/client/terminal_state.h"
 #include "control_msgs/FollowJointTrajectoryAction.h"
 
+
+
+
 //STORAGE OF DATA
 
 //Order vector
 std::vector<osrf_gear::Order> orders;
-
 
 //Logical Cam Arrays
 osrf_gear::LogicalCameraImage cam_bins[6];
 osrf_gear::LogicalCameraImage cam_agvs[2];
 osrf_gear::LogicalCameraImage cam_qual[2];
 
-//Joint States Storage
-sensor_msgs::JointState joint_states;
-
+//Joint States Storage (original o and corrected c)
+sensor_msgs::JointState joint_states_o;
+sensor_msgs::JointState joint_states_c;
 
 
 
@@ -100,10 +102,34 @@ void qual2CamCallback(const osrf_gear::LogicalCameraImage::ConstPtr& msg){
 
 //Joint State Callback
 void jointCallback(const sensor_msgs::JointState::ConstPtr& current_joint_states) {
-  joint_states.name = current_joint_states->name;
-  joint_states.position = current_joint_states->position;
-  joint_states.velocity = current_joint_states->velocity;
-  joint_states.effort = current_joint_states->effort;
+  //Stores the original joint state with the wrong order of joints
+  joint_states_o.name = current_joint_states->name;
+  joint_states_o.position = current_joint_states->position;
+  joint_states_o.velocity = current_joint_states->velocity;
+  joint_states_o.effort = current_joint_states->effort;
+
+  //makes a copy of the joint state with all joints in the CORRECT, SENSIBLE ORDER 
+  joint_states_c.name = {"linear_arm_actuator_joint", "shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint", "wrist_1_joint", "wrist_2_joint", "wrist_3_joint"};
+  joint_states_c.position.clear();
+  joint_states_c.position.resize(7);
+  joint_states_c.velocity.clear();
+  joint_states_c.velocity.resize(7);
+  joint_states_c.effort.clear();
+  joint_states_c.effort.resize(7);
+
+
+  if(joint_states_o.name.size() > 0 && joint_states_o.position.size() > 0 && joint_states_o.velocity.size() > 0 && joint_states_o.effort.size() > 0){
+    for(int i = 0; i < 7; i++){
+      for(int j = 0; j<7; j++){
+        if(joint_states_c.name.at(i) == joint_states_o.name.at(j)){
+          joint_states_c.position.at(i) = joint_states_o.position.at(j);
+          joint_states_c.velocity.at(i) = joint_states_o.velocity.at(j);
+          joint_states_c.effort.at(i) = joint_states_o.effort.at(j);
+          break;
+        }
+      }
+    } 
+  }
 }
 
 
@@ -142,8 +168,22 @@ int main(int argc, char **argv)
   //Joint Trajectory Action Server
   control_msgs::FollowJointTrajectoryAction joint_trajectory_as;
 
+  //joint_states temporary name holder
+  std::vector<std::string> joint_names_temp;
+
+  //joint states temp angle holder
+  std::vector<double> joint_angles_temp;
+
+  //Initial arm angles
+  std::vector<double> q_int = {3.14, -1.13, 1.51, 3.77, -1.51, 0};
+
+  //Bin Locations Along Linear Rail (determined through testing)
+  std::vector<double> bin_locs = {-1.9, -1.15, -0.35, 0.35, 1.15, 1.9};
+
   //Clears all vectors
   orders.clear();
+  joint_names_temp.clear();
+  joint_angles_temp.clear();
 
 
   //ROS NODE SETUP
@@ -264,7 +304,7 @@ int main(int argc, char **argv)
                 }
               }
               
-              ROS_INFO("PRODUCT TYPE: [%s] IS IN BIN: [%d]", product.type.c_str(), n);
+              ROS_INFO("PRODUCT TYPE: [%s] IS IN BIN: [%i]", product.type.c_str(), n);
 
 
 
@@ -308,12 +348,12 @@ int main(int argc, char **argv)
 
 
               //get current pose using forwards kinematics
-              q_pose[0] = joint_states.position[1];
-              q_pose[1] = joint_states.position[2];
-              q_pose[2] = joint_states.position[3];
-              q_pose[3] = joint_states.position[4];
-              q_pose[4] = joint_states.position[5];
-              q_pose[5] = joint_states.position[6];
+              q_pose[0] = joint_states_c.position[1];
+              q_pose[1] = joint_states_c.position[2];
+              q_pose[2] = joint_states_c.position[3];
+              q_pose[3] = joint_states_c.position[4];
+              q_pose[4] = joint_states_c.position[5];
+              q_pose[5] = joint_states_c.position[6];
               ur_kinematics::forward((double *)&q_pose, (double *)&T_pose);
 
               //Send the goal pose to IK
@@ -323,8 +363,18 @@ int main(int argc, char **argv)
               T_des[3][0] = 0.0;  T_des[3][1] = 0.0;  T_des[3][2] = 0.0;  T_des[3][3] = 1.0;
               int num_sols = ur_kinematics::inverse((double *)&T_des, (double *)&q_des);
 
+
+
+              //ISSUES WITH IK POSE, IT RETURNS ZEROES OR RANDOM VALUES
               //filter IK results
 
+              // Must select which of the num_sols solutions to use.  Just start with the first.
+              int q_des_indx = 0;
+
+              //Go through all 8 returned sols
+              //for(int x = 0; x <8; x++){
+                //ROS_INFO("THE [%d] SOL IS [%s] [%s] [%s] [%s] [%s] [%s]", x, std::to_string(q_des[x][0]).c_str(), std::to_string(q_des[x][1]).c_str(), std::to_string(q_des[x][2]).c_str(), std::to_string(q_des[x][3]).c_str(), std::to_string(q_des[x][4]).c_str(), std::to_string(q_des[x][5]).c_str());
+              //}
 
               //Create trajectory message and fill out header
               joint_trajectory.header.seq = count++;
@@ -344,36 +394,75 @@ int main(int argc, char **argv)
               //Start and end points
               joint_trajectory.points.clear();
               joint_trajectory.points.resize(2);
-              // Set the start point to the current position of the joints from joint_states.
+
+
+
+              // Set the start point to the current position of the joints from joint_states_c.
               joint_trajectory.points[0].positions.resize(joint_trajectory.joint_names.size());
-              for (int indy = 0; indy < joint_trajectory.joint_names.size(); indy++) {
-                for (int indz = 0; indz < joint_states.name.size(); indz++) {
-                  if (joint_trajectory.joint_names[indy] == joint_states.name[indz]) {
-                    joint_trajectory.points[0].positions[indy] = joint_states.position[indz];
+
+              for (int y = 0; y < joint_trajectory.joint_names.size(); y++) {
+                for (int z = 0; z < joint_states_o.name.size(); z++) {
+                  if (joint_trajectory.joint_names[y] == joint_states_o.name[z]) {
+                    joint_trajectory.points[0].positions[y] = joint_states_o.position[z];
                     break;
                   }
                 }
               }
 
               //When to start 
-              joint_trajectory.points[0].time_from_start = ros::Duration(0.0);
+              joint_trajectory.points[0].time_from_start = ros::Duration(0.5);
 
-              // Must select which of the num_sols solutions to use.  Just start with the first.
-              int q_des_indx = 0;
 
               // Set the end point for the movement
               joint_trajectory.points[1].positions.resize(joint_trajectory.joint_names.size());
 
               // Set the linear_arm_actuator_joint from joint_states as it is not part of the inverse kinematics solution.
-              joint_trajectory.points[1].positions[0] = joint_states.position[1];
+              joint_trajectory.points[1].positions[0] = joint_states_c.position[0];
 
               // The actuators are commanded in an odd order, enter the joint positions in the correct positions
-              for (int indy = 0; indy < 6; indy++) {
-                joint_trajectory.points[1].positions[indy + 1] = q_des[q_des_indx][indy];
+              for (int y = 0; y < 6; y++) {
+                joint_trajectory.points[1].positions[y + 1] = q_des[q_des_indx][y];
               }
 
+
+
+              //joint_trajectory.points[1].positions.clear();
+              //joint_trajectory.points[1].positions={2.5, 0.0, 3.14, 3.14, 3.77, -1.51, 0}; 
+              //Default Angles w/ Original Order
+              //ELBOW, RAIL, SHOULDER_LIFT(do not go too low <3.14), SHOULDER_PAN, W1, W2, W3
+
+              joint_trajectory.points[1].positions.clear();
+              joint_trajectory.points[1].positions={0.0, 3.14, 3.14, 2.5, 3.77, -1.51, 0}; 
+              joint_trajectory.points[1].positions[0] = bin_locs[n-1];
+              //Default angles w/ corrected order
+              //Linear, S_lift, S_pan, Elbow, W1, W2, W3
+
+
+              /*
+              //resorts it according to the local order of joints from joint_states_o
+              //double loop of 7
+              joint_angles_temp.clear();
+              for(int i = 0; i < 7; i++){
+                for(int j = 0; j<7; j++){
+                  //check if name of original matches to name of corrected
+                  if(joint_states_o.name.at(i) == joint_states_c.name.at(j)){
+                    //sort from corrected position to original position in vector
+                    joint_angles_temp.push_back(joint_trajectory.points[1].positions.at(j));
+                    break;
+                  }
+                }
+              }
+              //copy the de-corrected order back over
+              joint_trajectory.points[1].positions = joint_angles_temp;
+              joint_angles_temp.clear();
+              */
+
+
+
+              
+
               // How long to take for the movement.
-              joint_trajectory.points[1].time_from_start = ros::Duration(30.0);
+              joint_trajectory.points[1].time_from_start = ros::Duration(5);
 
 
               //Trajectory action server to make arm to move to goal pose
@@ -384,12 +473,64 @@ int main(int argc, char **argv)
               joint_trajectory_as.action_goal.goal_id.stamp = ros::Time::now();
               joint_trajectory_as.action_goal.goal_id.id = std::to_string(count -1);
 
-              actionlib::SimpleClientGoalState state = trajectory_as.sendGoalAndWait(joint_trajectory_as.action_goal.goal, ros::Duration(30.0), ros::Duration(30.0));
+              ROS_INFO("MOVING TOWARDS BIN [%i] LOCATION", n);
+              
+              actionlib::SimpleClientGoalState state = trajectory_as.sendGoalAndWait(joint_trajectory_as.action_goal.goal, ros::Duration(30.0), ros::Duration(10.0));
+              
               ROS_INFO("Action Server returned with status: [%i] %s", state.state_, state.toString().c_str());
 
 
 
 
+
+
+              //Create trajectory message and fill out header
+              joint_trajectory.header.seq = count++;
+              joint_trajectory.header.stamp = ros::Time::now();
+              joint_trajectory.header.frame_id = "/world";
+
+              //Start and end points
+              joint_trajectory.points.clear();
+              joint_trajectory.points.resize(2);
+
+
+
+              // Set the start point to the current position of the joints from joint_states_c.
+              joint_trajectory.points[0].positions.resize(joint_trajectory.joint_names.size());
+
+              for (int y = 0; y < joint_trajectory.joint_names.size(); y++) {
+                for (int z = 0; z < joint_states_o.name.size(); z++) {
+                  if (joint_trajectory.joint_names[y] == joint_states_o.name[z]) {
+                    joint_trajectory.points[0].positions[y] = joint_states_o.position[z];
+                    break;
+                  }
+                }
+              }
+
+              //When to start 
+              joint_trajectory.points[0].time_from_start = ros::Duration(0.5);
+
+
+              // Set the end point for the movement
+              joint_trajectory.points[1].positions.resize(joint_trajectory.joint_names.size());
+
+              joint_trajectory.points[1].positions.clear();
+              joint_trajectory.points[1].positions={0.0, 3.14, 3.14, 2.5, 3.77, -1.51, 0}; 
+
+              // How long to take for the movement.
+              joint_trajectory.points[1].time_from_start = ros::Duration(5);
+
+
+              //Trajectory action server to make arm to move to goal pose
+              joint_trajectory_as.action_goal.goal.trajectory = joint_trajectory;
+              joint_trajectory_as.action_goal.header.seq = count++;
+              joint_trajectory_as.action_goal.header.stamp = ros::Time::now();
+              joint_trajectory_as.action_goal.header.frame_id = "/world";
+              joint_trajectory_as.action_goal.goal_id.stamp = ros::Time::now();
+              joint_trajectory_as.action_goal.goal_id.id = std::to_string(count -1);
+              ROS_INFO("RETURNING TO HOME");
+              state = trajectory_as.sendGoalAndWait(joint_trajectory_as.action_goal.goal, ros::Duration(30.0), ros::Duration(10.0));
+              ROS_INFO("Action Server returned with status: [%i] %s", state.state_, state.toString().c_str());
 
               }
             }
