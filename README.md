@@ -10,6 +10,11 @@ So far, it has covered almost all of the lab 6 material.
 
 There is a launch file included called team4_final.launch.
 
+IF THE FOLLOWING DOES NOT WORK, THE PACKAGE MUST BE RUN WITH:
+
+```rosrun team4_final team4_final_node```
+
+
 This package should be launched using the following command:
 
 ```roslaunch team4_final team4_final.launch```
