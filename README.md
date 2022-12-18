@@ -4,15 +4,12 @@
 ## Luca and Bethany
 
 This redo covers all of lab 5 and lab 6. Lab 7 is still in progress.
+This was made in like 3 and a half days.
 
 
 ## LAUNCH INSTRUCTIONS
 
 There is a launch file included called team4_final.launch.
-
-IF THE FOLLOWING DOES NOT WORK, THE PACKAGE MUST BE RUN WITH:
-
-```rosrun team4_final team4_final_node```
 
 
 This package should be launched using the following command:
@@ -21,7 +18,9 @@ This package should be launched using the following command:
 
 It has two args: `python` (default to false) and `ecse_launch_file` (defaults to `$(find ecse_373_ariac)/launch/ecse_373_ariac.launch`).
 
-Currently the launch file has issues finding the ecse_373_ariac package despite it being able to launch separately.
+If the launch file does not work, the ecse_373_ariac launch file must be run separately and then this package must be started with:
+
+```rosrun team4_final team4_final_node```
 
 
 ## FUNCTION
@@ -41,16 +40,14 @@ The node for this project has a main loop that does the following:
   7. Moves the arm based on that IK
   8. Resets the arm to the "default" position
   9. Returns the arm to the home along the linear actuator (roughly the center)
-- If it is unable to find a suitable IK solution, the arm simply does not attempt to move over the first product
+- If it is unable to find a suitable IK solution, the arm simply does not attempt to move over the product
 
 
 ## KNOWN ISSUES
 
 This package has several known issues currently:
-- The target_link_libraries function in CMakeLists does not work with ur10_kin
-- The IK solver does not return solutions for certain bins/products
-- The launch file cannot locate the ecse_373_ariac package
 - A trajectory abort caused by colliding with the environment will sometimes result in unpredictable trajectory behavior
+- The arm does not always reach the products, as it will collide with the logical cameras.
 
 
 ## DEPENDENCIES
